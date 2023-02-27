@@ -5,7 +5,9 @@ Executable file version is available here:
 
 **Important note:**
 
-<span style="color:red">Both files: main.exe and form.ui must be in the same folder, otherwise application won't work!</span>
+```diff
+- Both files: main.exe and form.ui must be in the same folder, otherwise application won't work!
+```
 
 ---
 
