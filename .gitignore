@@ -1,0 +1,7 @@
+/buildApp.sh
+/main.spec
+/ta_config.ini
+build/
+data/
+dist/
+.idea/
