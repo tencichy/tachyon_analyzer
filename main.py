@@ -4,8 +4,12 @@ import os
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from PyQt5 import uic
-from PyQt5.QtGui import QStandardItemModel, QStandardItem
-from PyQt5.QtCore import QDir
+from PyQt5.QtGui import (
+    QStandardItemModel,
+    QStandardItem,
+    QKeyEvent
+)
+from PyQt5.QtCore import QDir, Qt
 from PyQt5.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -14,7 +18,9 @@ from PyQt5.QtWidgets import (
     QDialog,
     QListView,
     QAbstractItemView,
-    QMessageBox
+    QMessageBox,
+    QMenuBar,
+    QAction
 )
 import sys
 import json
@@ -27,26 +33,24 @@ import configparser
 #              #
 # -------------#
 
-class dataPacket():
+class DataPacket:
     def __init__(self, data, time, labels):
         self.data = data
         self.time = time
         self.labels = labels
 
 
-class chart():
-    def __init__(self, name, labels):
+class Chart:
+    def __init__(self, name, labels, dataID):
         self.name = name
         self.labels = labels
+        self.dataID = dataID
 
     def __str__(self):
         return f"{self.name}: {self.labels}"
 
     def __repr__(self):
         return str(self)
-
-    # def toJSON(self):
-    #     return json.dumps(self, default=lambda o: o.__dict__, sort_keys=True, indent=4)
 
 
 # --------------#
@@ -99,7 +103,7 @@ def getData(filePath):
     # Assign labels from file
     labels = list(data.iloc[0, :])
 
-    return dataPacket(data, time, labels)
+    return DataPacket(data, time, labels)
 
 
 def updateDataList(labels, dataListViewModel):
@@ -116,11 +120,11 @@ def showMessage(text):
     msg.exec_()
 
 
-# ---------------------------------------#
+# --------------------------------------#
 #                                       #
 #   Window class with object handlers   #
 #                                       #
-# ---------------------------------------#
+# --------------------------------------#
 
 
 class Ui(QMainWindow):
@@ -128,174 +132,223 @@ class Ui(QMainWindow):
         super(Ui, self).__init__()
         uic.loadUi('form.ui', self)
 
-        self.data = None
-        charts = []  # TODO Change this to self. type
+        self.data = []
+        self.charts = []
+        self.dataFileIndex = {}
 
-        dataListView = self.findChild(QListView, 'dataListView')  # Getting ListView for data from file
-        dataListViewModel = QStandardItemModel()  # Creating new ItemModel
-        dataListView.setModel(dataListViewModel)  # Setting new ItemModel
-        dataListView.setEditTriggers(QAbstractItemView.NoEditTriggers)  # Set ListView to non-modifiable
+        self._createActions()
+        self._createMenuBar()
 
-        chartsListView = self.findChild(QListView, 'chartsListView')
-        chartsListViewModel = QStandardItemModel()
-        chartsListView.setModel(chartsListViewModel)
+        self.dataListView = self.findChild(QListView, 'dataListView')  # Getting ListView for data from file
+        self.dataListViewModel = QStandardItemModel()  # Creating new ItemModel
+        self.dataListView.setModel(self.dataListViewModel)  # Setting new ItemModel
+        self.dataListView.setEditTriggers(QAbstractItemView.NoEditTriggers)  # Set ListView to non-modifiable
+
+        self.dataFileListView = self.findChild(QListView, 'dataFileListView')
+        self.dataFileListViewModel = QStandardItemModel()
+        self.dataFileListView.setModel(self.dataFileListViewModel)
+        self.dataFileListView.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.dataFileListView.clicked.connect(self.handleFileClick)
+
+        self.chartsListView = self.findChild(QListView, 'chartsListView')
+        self.chartsListViewModel = QStandardItemModel()
+        self.chartsListView.setModel(self.chartsListViewModel)
         # TODO Setting name of chart
-        chartsListView.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.chartsListView.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.chartsListView.clicked.connect(self.handleChartClick)
 
-        dataChartListView = self.findChild(QListView, 'dataChartListView')
-        dataChartListViewModel = QStandardItemModel()
-        dataChartListView.setModel(dataChartListViewModel)
+        self.dataChartListView = self.findChild(QListView, 'dataChartListView')
+        self.dataChartListViewModel = QStandardItemModel()
+        self.dataChartListView.setModel(self.dataChartListViewModel)
         # TODO Setting names of data in single chart
-        dataChartListView.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.dataChartListView.setEditTriggers(QAbstractItemView.NoEditTriggers)
 
-        openFileButton = self.findChild(QPushButton, 'openFileButton')  # Getting Button for opening file
-        openFileButton.clicked.connect(
-            lambda: self.handleOpenFile(dataListViewModel, charts, chartsListViewModel))  # Adding handler for opening file
+        self.openFileAction.triggered.connect(self.handleOpenFile)
 
         addChartButton = self.findChild(QPushButton, 'addChartButton')
-        addChartButton.clicked.connect(lambda: self.handleAddChart(charts, chartsListViewModel))
+        addChartButton.clicked.connect(self.handleAddChart)
 
         deleteChartButton = self.findChild(QPushButton, 'deleteChartButton')
-        deleteChartButton.clicked.connect(lambda: self.handleDeleteChart(charts, chartsListView, chartsListViewModel, dataChartListViewModel))
-
-        chartsListView.clicked.connect(lambda: self.handleChartClick(charts, chartsListView, dataChartListViewModel))
+        deleteChartButton.clicked.connect(self.handleDeleteChart)
 
         addDataButton = self.findChild(QPushButton, 'addDataButton')
-        addDataButton.clicked.connect(
-            lambda: self.handleAddData(dataListView, chartsListView, charts, dataChartListViewModel))
+        addDataButton.clicked.connect(self.handleAddData)
 
         deleteDataButton = self.findChild(QPushButton, 'removeDataButton')
-        deleteDataButton.clicked.connect(
-            lambda: self.handleDeleteData(charts, chartsListView, dataChartListView, dataChartListViewModel))
+        deleteDataButton.clicked.connect(self.handleDeleteData)
 
         showChartsButton = self.findChild(QPushButton, 'showChartsButton')
-        showChartsButton.clicked.connect(lambda: self.handleShowCharts(charts))
+        showChartsButton.clicked.connect(self.handleShowCharts)
 
-        saveConfigurationButton = self.findChild(QPushButton, 'saveConfigurationButton')
-        saveConfigurationButton.clicked.connect(lambda: self.handleSaveConfiguration(charts))
+        self.saveConfigAction.triggered.connect(self.handleSaveConfiguration)
 
-        openConfigurationButton = self.findChild(QPushButton, 'openConfigurationButton')
-        openConfigurationButton.clicked.connect(lambda: self.handleOpenConfiguration(charts, chartsListViewModel))
+        self.openConfigAction.triggered.connect(self.handleOpenConfiguration)
 
-        setDefaultConfigurationButton = self.findChild(QPushButton, 'setDefaultConfig')
-        setDefaultConfigurationButton.clicked.connect(lambda: self.handleSetDefaultConfiguration())
+        self.setDefaultConfigAction.triggered.connect(self.handleSetDefaultConfiguration)
 
-        clearDefaultConfigurationButton = self.findChild(QPushButton, 'clearDefaultConfig')
-        clearDefaultConfigurationButton.clicked.connect(lambda: self.handleClearDefaultConfiguration())
+        self.clearDefaultConfigAction.triggered.connect(self.handleClearDefaultConfiguration)
 
         self.show()
 
-    # Handling file opening and updating data ListView
-    def handleOpenFile(self, dataListViewModel, charts, chartsListViewModel):
-        fileName, _ = QFileDialog.getOpenFileName(self, "Select file", "", "CSV (*.csv)")
-        if fileName:
-            dp = getData(fileName)
-            self.data = dp
-            dataListViewModel.clear()
-            updateDataList(dp.labels, dataListViewModel)
-            if os.path.isfile('ta_config.ini'):
-                config = configparser.ConfigParser()
-                config.read('ta_config.ini')
-                if config['DEFAULT']['config_file'] != '':
-                    file = open(config['DEFAULT']['config_file'])
-                    fileCharts = json.load(file)
-                    file.close()
-                    for ch in fileCharts:
-                        charts.append(chart(ch['name'], ch['labels']))
-                        chartsListViewModel.appendRow(QStandardItem(ch['name']))
+    def _createActions(self):
+        self.openFileAction = QAction("&Open...", self)
+        self.openFileAction.setShortcut("Ctrl+O")
 
-                    self.handleShowCharts(charts)
+        self.openConfigAction = QAction("&Open...", self)
+        self.openConfigAction.setShortcut("Ctrl+Alt+O")
+
+        self.saveConfigAction = QAction("&Save", self)
+        self.saveConfigAction.setShortcut("Ctrl+Alt+S")
+
+        self.setDefaultConfigAction = QAction("&Set default", self)
+        self.setDefaultConfigAction.setShortcut("Ctrl+Alt+D")
+
+        self.clearDefaultConfigAction = QAction("&Clear default", self)
+        self.clearDefaultConfigAction.setShortcut("Ctrl+Alt+C")
+
+    def _createMenuBar(self):
+        menuBar = QMenuBar(self)
+        fileMenu = menuBar.addMenu("&Data")
+
+        fileMenu.addAction(self.openFileAction)
+
+        configMenu = menuBar.addMenu("&Configuration")
+
+        configMenu.addAction(self.openConfigAction)
+        configMenu.addAction(self.saveConfigAction)
+
+        configDefaultMenu = configMenu.addMenu("&Default")
+
+        configDefaultMenu.addAction(self.setDefaultConfigAction)
+        configDefaultMenu.addAction(self.clearDefaultConfigAction)
+
+        self.setMenuBar(menuBar)
+
+    # Handling file opening and updating data ListView
+    def handleOpenFile(self):
+        fileNames, _ = QFileDialog.getOpenFileNames(self, "Select file", "", "CSV (*.csv)")
+
+        if fileNames[0]:
+            self.dataListViewModel.clear()
+            self.dataFileListViewModel.clear()
+            self.data.clear()
+            self.dataFileIndex.clear()
+            updateDataList(getData(fileNames[0]).labels, self.dataListViewModel)
+
+        for index, fileName in enumerate(fileNames):
+            self.data.append(getData(fileName))
+            self.dataFileIndex[os.path.basename(fileName)] = index
+            self.dataFileListViewModel.appendRow(QStandardItem(os.path.basename(fileName)))
+
+        if os.path.isfile('ta_config.ini') and fileNames[0]:
+            config = configparser.ConfigParser()
+            config.read('ta_config.ini')
+            if config['DEFAULT']['config_file'] != '':
+                file = open(config['DEFAULT']['config_file'])
+                fileCharts = json.load(file)
+                file.close()
+                for ch in fileCharts:
+                    self.charts.append(Chart(ch['name'], ch['labels'], ch['dataID']))
+                    self.chartsListViewModel.appendRow(QStandardItem(ch['name']))
+
+                self.handleShowCharts()
+
+    def handleFileClick(self):
+        self.dataListViewModel.clear()
+        updateDataList(self.data[self.dataFileIndex[self.dataFileListView.selectedIndexes()[0].data()]].labels, self.dataListViewModel)
 
     # Handling adding charts
-    def handleAddChart(self, charts, chartsListViewModel):
-        if len(charts) == 0:
-            charts.append(chart("Chart 0", []))
-            chartsListViewModel.appendRow(QStandardItem("Chart 0"))
+    def handleAddChart(self):
+        if len(self.charts) == 0:
+            self.charts.append(Chart("Chart 0", [], []))
+            self.chartsListViewModel.appendRow(QStandardItem("Chart 0"))
         else:
-            chartName = str("Chart " + str(len(charts)))
-            charts.append(chart(chartName, []))
-            chartsListViewModel.appendRow(QStandardItem(chartName))
+            chartName = str("Chart " + str(len(self.charts)))
+            self.charts.append(Chart(chartName, [], []))
+            self.chartsListViewModel.appendRow(QStandardItem(chartName))
 
-    def handleDeleteChart(self, charts, chartsListView, chartsListViewModel, dataChartListViewModel):
-        if chartsListView.selectedIndexes():
+    def handleDeleteChart(self):
+        if self.chartsListView.selectedIndexes():
             element = list(
                 filter(
-                    lambda c: c.name == chartsListView.selectedIndexes()[0].data(),
-                    charts
+                    lambda c: c.name == self.chartsListView.selectedIndexes()[0].data(),
+                    self.charts
                 )
             )
-            for i, o in enumerate(charts):
+            for i, o in enumerate(self.charts):
                 if o.name == element[0].name:
-                    del charts[i]
+                    del self.charts[i]
                     break
 
-            chartsListViewModel.removeRow(chartsListView.selectedIndexes()[0].row())
-            dataChartListViewModel.clear()
+            self.chartsListViewModel.removeRow(self.chartsListView.selectedIndexes()[0].row())
+            self.dataChartListViewModel.clear()
         else:
             showMessage("Make sure that you've selected chart")
 
-    def handleChartClick(self, charts, chartsListView, dataChartListViewModel):
-        dataChartListViewModel.clear()
+    def handleChartClick(self):
+        self.dataChartListViewModel.clear()
         element = list(
             filter(
-                lambda c: c.name == chartsListView.selectedIndexes()[0].data(),
-                charts
+                lambda c: c.name == self.chartsListView.selectedIndexes()[0].data(),
+                self.charts
             )
         )
         if element[0].labels:
             for label in element[0].labels:
-                dataChartListViewModel.appendRow(QStandardItem(label))
+                self.dataChartListViewModel.appendRow(QStandardItem(label))
 
     # Handling adding data to chart
-    def handleAddData(self, dataListView, chartsListView, charts, dataChartListViewModel):
-        if dataListView.selectedIndexes() and chartsListView.selectedIndexes():
-            # TODO Do not allow duplicates in charts
+    def handleAddData(self):
+        if self.dataListView.selectedIndexes() and self.chartsListView.selectedIndexes() and self.dataFileListView.selectedIndexes():
             element = list(
                 filter(
-                    lambda c: c.name == chartsListView.selectedIndexes()[0].data(),
-                    charts
+                    lambda c: c.name == self.chartsListView.selectedIndexes()[0].data(),
+                    self.charts
                 )
             )
-            element[0].labels.append(dataListView.selectedIndexes()[0].data())
+            element[0].labels.append(self.dataListView.selectedIndexes()[0].data())
+            element[0].dataID.append(self.dataFileIndex[self.dataFileListView.selectedIndexes()[0].data()])
 
-            dataChartListViewModel.clear()
+            self.dataChartListViewModel.clear()
             for label in element[0].labels:
-                dataChartListViewModel.appendRow(QStandardItem(label))
+                self.dataChartListViewModel.appendRow(QStandardItem(label))
 
         else:
-            showMessage("Make sure that you've selected data and chart.")
+            showMessage("Make sure that you've selected data file, data and chart.")
 
-    def handleDeleteData(self, charts, chartsListView, dataChartListView, dataChartListViewModel):
-        if dataChartListView.selectedIndexes() and chartsListView.selectedIndexes():
-            element = list(
-                filter(
-                    lambda c: dataChartListView.selectedIndexes()[0].data() in c.labels and c.name ==
-                              chartsListView.selectedIndexes()[0].data(),
-                    charts
-                )
-            )
-            for ch in charts:
-                if dataChartListView.selectedIndexes()[0].data() in ch.labels and ch.name == \
-                        chartsListView.selectedIndexes()[0].data():
-                    ch.labels.remove(dataChartListView.selectedIndexes()[0].data())
+    def handleDeleteData(self):
+        if self.dataChartListView.selectedIndexes() and self.chartsListView.selectedIndexes():
+            # element = list(
+            #     filter(
+            #         lambda c: self.dataChartListView.selectedIndexes()[0].data() in c.labels and c.name ==
+            #                   self.chartsListView.selectedIndexes()[0].data(),
+            #         self.charts
+            #     )
+            # )
+            for ch in self.charts:
+                if self.dataChartListView.selectedIndexes()[0].data() in ch.labels and ch.name == \
+                        self.chartsListView.selectedIndexes()[0].data():
+                    ch.dataID.pop(ch.labels.index(self.dataChartListView.selectedIndexes()[0].data()))
+                    ch.labels.remove(self.dataChartListView.selectedIndexes()[0].data())
 
-            dataChartListViewModel.removeRow(dataChartListView.selectedIndexes()[0].row())
+            self.dataChartListViewModel.removeRow(self.dataChartListView.selectedIndexes()[0].row())
         else:
             showMessage("Make sure that you've selected chart data")
 
-    def handleShowCharts(self, charts):
-        if charts:
-            fig = make_subplots(rows=len(charts), cols=1)
-            for i, ch in enumerate(charts):
-                for label in ch.labels:
-                    fig.add_trace(go.Scatter(x=self.data.time, y=self.data.data.iloc[1:, self.data.labels.index(label)],
-                                             name=label), row=i + 1, col=1)
+    def handleShowCharts(self):
+        if self.charts:
+            fig = make_subplots(rows=len(self.charts), cols=1)
+            for chartID, ch in enumerate(self.charts):
+                for labelID, label in enumerate(ch.labels):
+                    fig.add_trace(go.Scatter(x=self.data[ch.dataID[labelID]].time,
+                                             y=self.data[ch.dataID[labelID]].data.iloc[1:, self.data[ch.dataID[labelID]].labels.index(label)],
+                                             name=label), row=chartID + 1, col=1)
 
             fig.update_xaxes(title_text='Time (s)')
             fig.show()
 
-    def handleSaveConfiguration(self, charts):
-        jsonToSave = json.dumps([ch.__dict__ for ch in charts])
+    def handleSaveConfiguration(self):
+        jsonToSave = json.dumps([ch.__dict__ for ch in self.charts])
 
         dialog = QFileDialog()
         dialog.setFilter(dialog.filter() | QDir.Hidden)
@@ -308,7 +361,7 @@ class Ui(QMainWindow):
             file.write(jsonToSave)
             file.close()
 
-    def handleOpenConfiguration(self, charts, chartsListViewModel):
+    def handleOpenConfiguration(self):
         fileName, _ = QFileDialog.getOpenFileName(self, "Select configuration file", "",
                                                   "TA Configuration file (*.json)")
         if fileName:
@@ -316,8 +369,8 @@ class Ui(QMainWindow):
             fileCharts = json.load(file)
             file.close()
             for ch in fileCharts:
-                charts.append(chart(ch['name'], ch['labels']))
-                chartsListViewModel.appendRow(QStandardItem(ch['name']))
+                self.charts.append(Chart(ch['name'], ch['labels'], ch['dataID']))
+                self.chartsListViewModel.appendRow(QStandardItem(ch['name']))
 
 
     def handleSetDefaultConfiguration(self):
@@ -335,6 +388,7 @@ class Ui(QMainWindow):
             config['DEFAULT']['config_file'] = ''
             with open('ta_config.ini', 'w') as configfile:
                 config.write(configfile)
+
 
 if __name__ == "__main__":
     # get window and run app
