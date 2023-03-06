@@ -25,9 +25,9 @@ If you want to run python file, make sure these libraries are installed:
 
 ---
 
-#How to use
+# How to use
 
-###Opening file and adding charts
+### Opening file and adding charts
 
 1. Click ***Open file*** button and choose .csv or .txt file with data.
 2. First list on the left should now contain labels with data.
@@ -36,7 +36,7 @@ If you want to run python file, make sure these libraries are installed:
 5. You can add more data to one chart or add another charts, and also remove them or remove data form charts.
 6. By clicking ***Show charts***, new web page with all charts should appear.
 
-###Configuration files
+### Configuration files
 
 - ***Save configuration*** button allows you to store current charts and data configuration.
 - ***Open configuration***, opens saved configuration.
