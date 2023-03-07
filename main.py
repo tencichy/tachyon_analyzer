@@ -16,11 +16,13 @@ from PyQt5.QtWidgets import (
     QListWidget,
     QMessageBox,
     QMenuBar,
-    QAction
+    QAction,
+    QCheckBox
 )
 import sys
 import json
 import configparser
+import copy
 
 
 #--------------#
@@ -84,7 +86,12 @@ def getData(filePath):
     # time = list(map(lambda x: x - time[0], time))
 
     # Delete rest of Time (s) columns
-    data.drop(data.columns[[0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39, 42, 45, 48, 51, 54, 57, 60]], axis=1,
+    colToDrop = []
+    for i in range(0, len(data.iloc[0, :])):
+        if data.iloc[0, i] == "Time (s)":
+            colToDrop.append(i)
+
+    data.drop(data.columns[colToDrop], axis=1,
               inplace=True)
 
     # Delete all empty columns and reset index
@@ -170,6 +177,8 @@ class Ui(QMainWindow):
 
         showChartsButton = self.findChild(QPushButton, 'showChartsButton')
         showChartsButton.clicked.connect(self.handleShowCharts)
+
+        self.alignDataCheckbox = self.findChild(QCheckBox, 'alignData')
 
         self.saveConfigAction.triggered.connect(self.handleSaveConfiguration)
 
@@ -357,7 +366,7 @@ class Ui(QMainWindow):
             for ch in self.charts:
                 if self.dataChartListWidget.selectedIndexes()[0].data() in ch.labels and ch.name == \
                         self.chartsListWidget.selectedIndexes()[0].data():
-                    ch.dataID.pop(ch.labels.index(self.dataChartListWidget.selectedIndexes()[0].data()))
+                    ch.dataID.pop(list(ch.labels.keys()).index(self.dataChartListWidget.selectedIndexes()[0].data()))
                     ch.labels.pop(self.dataChartListWidget.selectedIndexes()[0].data())
 
             self.dataChartListWidget.takeItem(self.dataChartListWidget.currentRow())
@@ -366,11 +375,16 @@ class Ui(QMainWindow):
 
     def handleShowCharts(self):
         if self.charts:
+            dataCopy = copy.deepcopy(self.data)
+            if self.alignDataCheckbox.isChecked():
+                for dt in dataCopy:
+                    dt.time = list(map(lambda x: x - dt.time[0], dt.time))
+
             fig = make_subplots(rows=len(self.charts), cols=1, subplot_titles=list(map(lambda x: x.name, self.charts)))
             for chartID, ch in enumerate(self.charts):
                 for labelID, label in enumerate(ch.labels.values()):
-                    fig.add_trace(go.Scatter(x=self.data[ch.dataID[labelID]].time,
-                                             y=self.data[ch.dataID[labelID]].data.iloc[1:, self.data[ch.dataID[labelID]].labels.index(label)],
+                    fig.add_trace(go.Scatter(x=dataCopy[ch.dataID[labelID]].time,
+                                             y=dataCopy[ch.dataID[labelID]].data.iloc[1:, dataCopy[ch.dataID[labelID]].labels.index(label)],
                                              name=label), row=chartID + 1, col=1)
 
             fig.update_xaxes(title_text='Time (s)')

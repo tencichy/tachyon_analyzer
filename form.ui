@@ -260,6 +260,22 @@
     <enum>Qt::Horizontal</enum>
    </property>
   </widget>
+  <widget class="QCheckBox" name="alignData">
+   <property name="enabled">
+    <bool>true</bool>
+   </property>
+   <property name="geometry">
+    <rect>
+     <x>930</x>
+     <y>340</y>
+     <width>101</width>
+     <height>22</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Align data to 0</string>
+   </property>
+  </widget>
  </widget>
  <resources/>
  <connections/>
