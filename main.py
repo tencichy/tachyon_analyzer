@@ -11,8 +11,9 @@ from PyQt5.QtWidgets import (
     QPushButton,
     QFileDialog,
     QDialog,
+    QInputDialog,
+    QLineEdit,
     QListWidget,
-    QAbstractItemView,
     QMessageBox,
     QMenuBar,
     QAction
@@ -22,11 +23,11 @@ import json
 import configparser
 
 
-# -------------#
+#--------------#
 #              #
 #   Classes    #
 #              #
-# -------------#
+#--------------#
 
 class DataPacket:
     def __init__(self, data, time, labels):
@@ -115,6 +116,13 @@ def showMessage(text):
     msg.exec_()
 
 
+def showEditBox(self, text):
+    text, okPressed = QInputDialog.getText(self, "Tachyon Data Analyzer", text, QLineEdit.Normal, "")
+    if okPressed and text != '':
+        return text
+    return None
+
+
 # --------------------------------------#
 #                                       #
 #   Window class with object handlers   #
@@ -135,22 +143,17 @@ class Ui(QMainWindow):
         self._createMenuBar()
 
         self.dataListWidget = self.findChild(QListWidget, 'dataListWidget')  # Getting ListWidget for data from file
-        self.dataListWidget.setEditTriggers(QAbstractItemView.NoEditTriggers)  # Set ListWidget to non-modifiable
 
         self.dataFileListWidget = self.findChild(QListWidget, 'dataFileListWidget')
-        self.dataFileListWidget.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.dataFileListWidget.clicked.connect(self.handleFileClick)
 
         self.chartsListWidget = self.findChild(QListWidget, 'chartsListWidget')
-        # TODO Setting name of chart
-        self.chartsListWidget.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.chartsListWidget.clicked.connect(self.handleChartClick)
-        #self.chartsListWidget.doubleClicked.connect(lambda: print("XD"))
+        self.chartsListWidget.doubleClicked.connect(self.handleEditChartName)
 
         self.dataChartListWidget = self.findChild(QListWidget, 'dataChartListWidget')
+        self.dataChartListWidget.doubleClicked.connect(self.handleEditDataName)
         # TODO Setting names of data in single chart
-        self.dataChartListWidget.setEditTriggers(QAbstractItemView.NoEditTriggers)
-
         self.openFileAction.triggered.connect(self.handleOpenFile)
 
         addChartButton = self.findChild(QPushButton, 'addChartButton')
@@ -248,12 +251,30 @@ class Ui(QMainWindow):
     # Handling adding charts
     def handleAddChart(self):
         if len(self.charts) == 0:
-            self.charts.append(Chart("Chart 0", [], []))
+            self.charts.append(Chart("Chart 0", {}, []))
             self.chartsListWidget.addItem("Chart 0")
         else:
             chartName = str("Chart " + str(len(self.charts)))
-            self.charts.append(Chart(chartName, [], []))
+            self.charts.append(Chart(chartName, {}, []))
             self.chartsListWidget.addItem(chartName)
+
+    def handleEditChartName(self):
+        newName = showEditBox(self, "Enter new chart name:")
+        if newName is not None:
+            element = list(
+                filter(
+                    lambda c: c.name == self.chartsListWidget.selectedIndexes()[0].data(),
+                    self.charts
+                )
+            )
+            for i, o in enumerate(self.charts):
+                if o.name == newName:
+                    showMessage("Chart name must be unique!")
+                    break
+                if o.name == element[0].name:
+                    self.charts[i].name = newName
+                    self.chartsListWidget.selectedItems()[0].setText(newName)
+                    break
 
     def handleDeleteChart(self):
         if self.chartsListWidget.selectedIndexes():
@@ -294,15 +315,35 @@ class Ui(QMainWindow):
                     self.charts
                 )
             )
-            element[0].labels.append(self.dataListWidget.selectedIndexes()[0].data())
-            element[0].dataID.append(self.dataFileIndex[self.dataFileListWidget.selectedIndexes()[0].data()])
+            element[0].labels[
+                str(
+                str(self.dataListWidget.selectedIndexes()[0].data()) +
+                " - " +
+                str(self.dataFileIndex[self.dataFileListWidget.selectedIndexes()[0].data()])
+                )
+            ] = self.dataListWidget.selectedIndexes()[0].data()
 
+            element[0].dataID.append(self.dataFileIndex[self.dataFileListWidget.selectedIndexes()[0].data()])
             self.dataChartListWidget.clear()
             for label in element[0].labels:
                 self.dataChartListWidget.addItem(label)
 
         else:
             showMessage("Make sure that you've selected data file, data and chart.")
+
+    def handleEditDataName(self):
+        newName = showEditBox(self, "Enter new chart name:")
+        if newName is not None:
+            for ch in self.charts:
+                if self.dataChartListWidget.selectedIndexes()[0].data() in ch.labels and ch.name == \
+                        self.chartsListWidget.selectedIndexes()[0].data():
+                    if newName not in ch.labels:
+                        ch.labels[newName] = ch.labels[self.dataChartListWidget.selectedIndexes()[0].data()]
+                        ch.labels.pop(self.dataChartListWidget.selectedIndexes()[0].data())
+                        self.dataChartListWidget.selectedItems()[0].setText(newName)
+                    else:
+                        showMessage("Data name must be unique across the current chart!")
+                        break
 
     def handleDeleteData(self):
         if self.dataChartListWidget.selectedIndexes() and self.chartsListWidget.selectedIndexes():
@@ -317,7 +358,7 @@ class Ui(QMainWindow):
                 if self.dataChartListWidget.selectedIndexes()[0].data() in ch.labels and ch.name == \
                         self.chartsListWidget.selectedIndexes()[0].data():
                     ch.dataID.pop(ch.labels.index(self.dataChartListWidget.selectedIndexes()[0].data()))
-                    ch.labels.remove(self.dataChartListWidget.selectedIndexes()[0].data())
+                    ch.labels.pop(self.dataChartListWidget.selectedIndexes()[0].data())
 
             self.dataChartListWidget.takeItem(self.dataChartListWidget.currentRow())
         else:
@@ -325,9 +366,9 @@ class Ui(QMainWindow):
 
     def handleShowCharts(self):
         if self.charts:
-            fig = make_subplots(rows=len(self.charts), cols=1)
+            fig = make_subplots(rows=len(self.charts), cols=1, subplot_titles=list(map(lambda x: x.name, self.charts)))
             for chartID, ch in enumerate(self.charts):
-                for labelID, label in enumerate(ch.labels):
+                for labelID, label in enumerate(ch.labels.values()):
                     fig.add_trace(go.Scatter(x=self.data[ch.dataID[labelID]].time,
                                              y=self.data[ch.dataID[labelID]].data.iloc[1:, self.data[ch.dataID[labelID]].labels.index(label)],
                                              name=label), row=chartID + 1, col=1)
@@ -360,7 +401,6 @@ class Ui(QMainWindow):
                 self.charts.append(Chart(ch['name'], ch['labels'], ch['dataID']))
                 self.chartsListWidget.addItem(ch['name'])
 
-
     def handleSetDefaultConfiguration(self):
         fileName, _ = QFileDialog.getOpenFileName(self, "Select configuration file", "",
                                                   "TA Configuration file (*.json)")
@@ -370,7 +410,8 @@ class Ui(QMainWindow):
             with open('ta_config.ini', 'w') as configfile:
                 config.write(configfile)
 
-    def handleClearDefaultConfiguration(self):
+    @staticmethod
+    def handleClearDefaultConfiguration():
         if os.path.isfile('ta_config.ini'):
             config = configparser.ConfigParser()
             config['DEFAULT']['config_file'] = ''
