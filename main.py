@@ -82,9 +82,6 @@ def getData(filePath):
     time = list(data.iloc[1:, 0])
     time = list(map(float, time))
 
-    # Always make time start from 0
-    # time = list(map(lambda x: x - time[0], time))
-
     # Delete rest of Time (s) columns
     colToDrop = []
     for i in range(0, len(data.iloc[0, :])):
@@ -98,13 +95,15 @@ def getData(filePath):
     data.dropna(how='all', axis=1, inplace=True)
     data = data.T.reset_index(drop=True).T
 
-    # Change data types to float
-    data.iloc[1:, :9] = data.iloc[1:, :9].astype(float)
-    data.iloc[1:, 10:14] = data.iloc[1:, 10:14].astype(float)
-    data.iloc[1:, 16:] = data.iloc[1:, 16:].astype(float)
-
     # Assign labels from file
     labels = list(data.iloc[0, :])
+
+    # Add labels from first row, to DataFrame labels, and delete first row
+    data.columns = data.iloc[0]
+    data = data[1:]
+
+    # Change data types to float
+    data[labels] = data[labels].apply(pd.to_numeric, errors='coerce', axis=1)
 
     return DataPacket(data, time, labels)
 
@@ -385,7 +384,7 @@ class Ui(QMainWindow):
                 for labelID, label in enumerate(ch.labels.values()):
                     fig.add_trace(go.Scatter(x=dataCopy[ch.dataID[labelID]].time,
                                              y=dataCopy[ch.dataID[labelID]].data.iloc[1:, dataCopy[ch.dataID[labelID]].labels.index(label)],
-                                             name=label), row=chartID + 1, col=1)
+                                             name=list(ch.labels.keys())[labelID]), row=chartID + 1, col=1)
 
             fig.update_xaxes(title_text='Time (s)')
             fig.show()
