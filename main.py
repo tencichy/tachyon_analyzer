@@ -23,6 +23,7 @@ import sys
 import json
 import configparser
 import copy
+import parameters
 
 
 #--------------#
@@ -32,10 +33,11 @@ import copy
 #--------------#
 
 class DataPacket:
-    def __init__(self, data, time, labels):
+    def __init__(self, data, time, labels, input_params):
         self.data = data
         self.time = time
         self.labels = labels
+        self.controller_params = input_params
 
 
 class Chart:
@@ -105,7 +107,10 @@ def getData(filePath):
     # Change data types to float
     data[labels] = data[labels].apply(pd.to_numeric, errors='coerce', axis=1)
 
-    return DataPacket(data, time, labels)
+    # Extracting controller parameters from end of the csv file
+    controller_params = parameters.get_parameters(filepath)
+
+    return DataPacket(data, time, labels, controller_params)
 
 
 def updateDataList(labels, dataListView):
