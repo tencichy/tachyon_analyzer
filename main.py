@@ -1,36 +1,26 @@
-import numpy as np
-import pandas as pd
-import os
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-from PyQt5 import uic
-from PyQt5.QtCore import QDir
-from PyQt5.QtWidgets import (
-    QApplication,
-    QMainWindow,
-    QPushButton,
-    QFileDialog,
-    QDialog,
-    QInputDialog,
-    QLineEdit,
-    QListWidget,
-    QMessageBox,
-    QMenuBar,
-    QAction,
-    QCheckBox
-)
-import sys
-import json
 import configparser
 import copy
+import json
+import os
+import sys
+
+import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+from PyQt5 import uic
+from PyQt5.QtCore import QDir
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QPushButton, QFileDialog, QDialog, QInputDialog, QLineEdit,
+                             QListWidget, QMessageBox, QMenuBar, QAction, QCheckBox)
+from plotly.subplots import make_subplots
+
 import parameters
 
 
-#--------------#
+# --------------#
 #              #
 #   Classes    #
 #              #
-#--------------#
+# --------------#
 
 class DataPacket:
     def __init__(self, data, time, labels, input_params):
@@ -90,8 +80,7 @@ def getData(filePath):
         if data.iloc[0, i] == "Time (s)":
             colToDrop.append(i)
 
-    data.drop(data.columns[colToDrop], axis=1,
-              inplace=True)
+    data.drop(data.columns[colToDrop], axis=1, inplace=True)
 
     # Delete all empty columns and reset index
     data.dropna(how='all', axis=1, inplace=True)
@@ -259,7 +248,8 @@ class Ui(QMainWindow):
 
     def handleFileClick(self):
         self.dataListWidget.clear()
-        updateDataList(self.data[self.dataFileIndex[self.dataFileListWidget.selectedIndexes()[0].data()]].labels, self.dataListWidget)
+        updateDataList(self.data[self.dataFileIndex[self.dataFileListWidget.selectedIndexes()[0].data()]].labels,
+                       self.dataListWidget)
 
     # Handling adding charts
     def handleAddChart(self):
@@ -274,12 +264,7 @@ class Ui(QMainWindow):
     def handleEditChartName(self):
         newName = showEditBox(self, "Enter new chart name:")
         if newName is not None:
-            element = list(
-                filter(
-                    lambda c: c.name == self.chartsListWidget.selectedIndexes()[0].data(),
-                    self.charts
-                )
-            )
+            element = list(filter(lambda c: c.name == self.chartsListWidget.selectedIndexes()[0].data(), self.charts))
             for i, o in enumerate(self.charts):
                 if o.name == newName:
                     showMessage("Chart name must be unique!")
@@ -291,12 +276,7 @@ class Ui(QMainWindow):
 
     def handleDeleteChart(self):
         if self.chartsListWidget.selectedIndexes():
-            element = list(
-                filter(
-                    lambda c: c.name == self.chartsListWidget.selectedIndexes()[0].data(),
-                    self.charts
-                )
-            )
+            element = list(filter(lambda c: c.name == self.chartsListWidget.selectedIndexes()[0].data(), self.charts))
             for i, o in enumerate(self.charts):
                 if o.name == element[0].name:
                     del self.charts[i]
@@ -309,12 +289,7 @@ class Ui(QMainWindow):
 
     def handleChartClick(self):
         self.dataChartListWidget.clear()
-        element = list(
-            filter(
-                lambda c: c.name == self.chartsListWidget.selectedIndexes()[0].data(),
-                self.charts
-            )
-        )
+        element = list(filter(lambda c: c.name == self.chartsListWidget.selectedIndexes()[0].data(), self.charts))
         if element[0].labels:
             for label in element[0].labels:
                 self.dataChartListWidget.addItem(label)
@@ -322,19 +297,10 @@ class Ui(QMainWindow):
     # Handling adding data to chart
     def handleAddData(self):
         if self.dataListWidget.selectedIndexes() and self.chartsListWidget.selectedIndexes() and self.dataFileListWidget.selectedIndexes():
-            element = list(
-                filter(
-                    lambda c: c.name == self.chartsListWidget.selectedIndexes()[0].data(),
-                    self.charts
-                )
-            )
-            element[0].labels[
-                str(
-                str(self.dataListWidget.selectedIndexes()[0].data()) +
-                " - " +
-                str(self.dataFileIndex[self.dataFileListWidget.selectedIndexes()[0].data()])
-                )
-            ] = self.dataListWidget.selectedIndexes()[0].data()
+            element = list(filter(lambda c: c.name == self.chartsListWidget.selectedIndexes()[0].data(), self.charts))
+            element[0].labels[str(str(self.dataListWidget.selectedIndexes()[0].data()) + " - " + str(
+                self.dataFileIndex[self.dataFileListWidget.selectedIndexes()[0].data()]))] = \
+                self.dataListWidget.selectedIndexes()[0].data()
 
             element[0].dataID.append(self.dataFileIndex[self.dataFileListWidget.selectedIndexes()[0].data()])
             self.dataChartListWidget.clear()
@@ -383,14 +349,29 @@ class Ui(QMainWindow):
             if self.alignDataCheckbox.isChecked():
                 for dt in dataCopy:
                     dt.time = list(map(lambda x: x - dt.time[0], dt.time))
+            subplot_layout = []
+            # creating subplot layout according to amount of charts
+            for index, value in enumerate(self.charts):
+                if index == 0:
+                    subplot_layout.append([{'type': 'table', 'rowspan': len(self.charts)}, {'type': 'scatter'}])
+                else:
+                    subplot_layout.append([None, {'type': 'scatter'}])
 
-            fig = make_subplots(rows=len(self.charts), cols=1, subplot_titles=list(map(lambda x: x.name, self.charts)))
+            print(subplot_layout)
+            fig = make_subplots(rows=len(self.charts), cols=2, subplot_titles=list(map(lambda x: x.name, self.charts)),
+                                specs=subplot_layout, column_widths=[0.2, 0.8])
+            df = pd.read_csv("https://raw.githubusercontent.com/plotly/datasets/master/Mining-BTC-180.csv")
+
             for chartID, ch in enumerate(self.charts):
                 for labelID, label in enumerate(ch.labels.values()):
                     fig.add_trace(go.Scatter(x=dataCopy[ch.dataID[labelID]].time,
-                                             y=dataCopy[ch.dataID[labelID]].data.iloc[1:, dataCopy[ch.dataID[labelID]].labels.index(label)],
-                                             name=list(ch.labels.keys())[labelID]), row=chartID + 1, col=1)
-
+                                             y=dataCopy[ch.dataID[labelID]].data.iloc[1:,
+                                               dataCopy[ch.dataID[labelID]].labels.index(label)],
+                                             name=list(ch.labels.keys())[labelID]), row=chartID + 1, col=2)
+            fig.add_trace(go.Table(
+                header=dict(values=["Date", "Number<br>Transactions", "Output<br>Volume (BTC)"], font=dict(size=10),
+                            align="left"), cells=dict(values=[df[k].tolist() for k in df.columns[1:4]], align="left")),
+                          row=1, col=1)
             fig.update_xaxes(title_text='Time (s)')
             fig.show()
 
