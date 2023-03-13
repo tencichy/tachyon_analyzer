@@ -357,10 +357,9 @@ class Ui(QMainWindow):
                 else:
                     subplot_layout.append([None, {'type': 'scatter'}])
 
-            print(subplot_layout)
             fig = make_subplots(rows=len(self.charts), cols=2, subplot_titles=list(map(lambda x: x.name, self.charts)),
                                 specs=subplot_layout, column_widths=[0.2, 0.8])
-            df = pd.read_csv("https://raw.githubusercontent.com/plotly/datasets/master/Mining-BTC-180.csv")
+            df = self.data[0].controller_params
 
             for chartID, ch in enumerate(self.charts):
                 for labelID, label in enumerate(ch.labels.values()):
@@ -369,9 +368,8 @@ class Ui(QMainWindow):
                                                dataCopy[ch.dataID[labelID]].labels.index(label)],
                                              name=list(ch.labels.keys())[labelID]), row=chartID + 1, col=2)
             fig.add_trace(go.Table(
-                header=dict(values=["Date", "Number<br>Transactions", "Output<br>Volume (BTC)"], font=dict(size=10),
-                            align="left"), cells=dict(values=[df[k].tolist() for k in df.columns[1:4]], align="left")),
-                          row=1, col=1)
+                header=dict(values=["Name", "Data", "Unit"], font=dict(size=10),
+                            align="left"), cells=dict(values=[df[k].tolist() for k in df.columns[0:3]])), row=1, col=1)
             fig.update_xaxes(title_text='Time (s)')
             fig.show()
 
