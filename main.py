@@ -374,17 +374,54 @@ class Ui(QMainWindow):
 
     def handleShowCharts(self):
         if self.charts:
+            # This index will be used to point on current data in figure, so program can set two x-axes if it is needed
+            currentDataIndex = 0
+
+            # This index points at current XAxis, it will be used if we need to have to different X-axes on one chart
+            currentXAxisIndex = 1
+
+            currentYAxisIndex = 1
+
+            # Copying data, for not affecting original data from file
             dataCopy = copy.deepcopy(self.data)
             if self.alignDataCheckbox.isChecked():
                 for dt in dataCopy:
                     dt.time = list(map(lambda x: x - dt.time[0], dt.time))
 
-            fig = make_subplots(rows=len(self.charts), cols=1, subplot_titles=list(map(lambda x: x.name, self.charts)))
+            fig = make_subplots(rows=len(self.charts),
+                                cols=1,
+                                subplot_titles=list(map(lambda x: x.name, self.charts))
+                                )
             for chartID, ch in enumerate(self.charts):
                 for labelID, label in enumerate(ch.labels.values()):
                     fig.add_trace(go.Scatter(x=dataCopy[ch.dataID[labelID]].time,
                                              y=dataCopy[ch.dataID[labelID]].data.iloc[1:, dataCopy[ch.dataID[labelID]].labels.index(label)],
                                              name=list(ch.labels.keys())[labelID]), row=chartID + 1, col=1)
+
+                    fig.data[currentDataIndex].update(xaxis=str('x'+str(currentXAxisIndex)))
+                    fig.data[currentDataIndex].update(yaxis=str('y'+str(currentYAxisIndex)))
+                    fig.update_xaxes(row=chartID+1,
+                                     col=1,
+                                     side='bottom',
+                                     overlaying=str('x'+str(currentXAxisIndex)),
+                                     anchor=str('y'+str(currentYAxisIndex))
+                                     )
+                    print("Chart ID: ", chartID, ", Label ID: ", labelID, ", XAxis index: ", currentXAxisIndex, ", YAxis index: ", currentYAxisIndex)
+                    if len(ch.labels) == 2 and labelID == 1:
+                        print("XAxis index update: ", (currentXAxisIndex+1))
+                        currentXAxisIndex += 1
+                        fig.data[currentDataIndex].update(xaxis=str('x'+str(currentXAxisIndex)))
+                        fig.update_xaxes(row=chartID + 1,
+                                         col=1,
+                                         side='top',
+                                         overlaying=str('x' + str(currentXAxisIndex)),
+                                         anchor=str('y' + str(currentYAxisIndex))
+                                         )
+                        
+                    currentDataIndex += 1
+
+                currentXAxisIndex += 1
+                currentYAxisIndex += 1
 
             fig.update_xaxes(title_text='Time (s)')
             fig.show()
