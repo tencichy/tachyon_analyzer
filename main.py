@@ -367,6 +367,8 @@ class Ui(QMainWindow):
                                              y=dataCopy[ch.dataID[labelID]].data.iloc[1:,
                                                dataCopy[ch.dataID[labelID]].labels.index(label)],
                                              name=list(ch.labels.keys())[labelID]), row=chartID + 1, col=2)
+            # TODO zaimplementować możliwość obsługi wielu plików
+            # TODO dodać nazwy parametrów do tabeli
             fig.add_trace(go.Table(
                 header=dict(values=["Name", "Data", "Unit"], font=dict(size=10),
                             align="left"), cells=dict(values=[df[k].tolist() for k in df.columns[0:3]])), row=1, col=1)
